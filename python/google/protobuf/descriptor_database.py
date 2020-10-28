@@ -58,7 +58,7 @@ class DescriptorDatabase(object):
     Raises:
       DescriptorDatabaseConflictingDefinitionError: if an attempt is made to
         add a proto with the same name but different definition than an
-        exisiting proto in the database.
+        existing proto in the database.
     """
     proto_name = file_desc_proto.name
     if proto_name not in self._file_desc_protos_by_file:
@@ -134,7 +134,11 @@ class DescriptorDatabase(object):
       # descriptor can also be found. The behavior is the same with
       # protobuf C++.
       top_level, _, _ = symbol.rpartition('.')
-      return self._file_desc_protos_by_symbol[top_level]
+      try:
+        return self._file_desc_protos_by_symbol[top_level]
+      except KeyError:
+        # Raise the original symbol as a KeyError for better diagnostics.
+        raise KeyError(symbol)
 
   def FindFileContainingExtension(self, extendee_name, extension_number):
     # TODO(jieluo): implement this API.

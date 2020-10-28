@@ -45,10 +45,8 @@ import junit.framework.TestCase;
  */
 public class FloatArrayListTest extends TestCase {
 
-  private static final FloatArrayList UNARY_LIST =
-      newImmutableFloatArrayList(1);
-  private static final FloatArrayList TERTIARY_LIST =
-      newImmutableFloatArrayList(1, 2, 3);
+  private static final FloatArrayList UNARY_LIST = newImmutableFloatArrayList(1);
+  private static final FloatArrayList TERTIARY_LIST = newImmutableFloatArrayList(1, 2, 3);
 
   private FloatArrayList list;
 
@@ -141,6 +139,68 @@ public class FloatArrayListTest extends TestCase {
     }
   }
 
+  public void testIndexOf_nullElement() {
+    assertEquals(-1, TERTIARY_LIST.indexOf(null));
+  }
+
+  public void testIndexOf_incompatibleElementType() {
+    assertEquals(-1, TERTIARY_LIST.indexOf(new Object()));
+  }
+
+  public void testIndexOf_notInList() {
+    assertEquals(-1, UNARY_LIST.indexOf(2F));
+  }
+
+  public void testIndexOf_notInListWithDuplicates() {
+    FloatArrayList listWithDupes = newImmutableFloatArrayList(1F, 1F);
+    assertEquals(-1, listWithDupes.indexOf(2F));
+  }
+
+  public void testIndexOf_inList() {
+    assertEquals(1, TERTIARY_LIST.indexOf(2F));
+  }
+
+  public void testIndexOf_inListWithDuplicates_matchAtHead() {
+    FloatArrayList listWithDupes = newImmutableFloatArrayList(1F, 1F, 2F);
+    assertEquals(0, listWithDupes.indexOf(1F));
+  }
+
+  public void testIndexOf_inListWithDuplicates_matchMidList() {
+    FloatArrayList listWithDupes = newImmutableFloatArrayList(2F, 1F, 1F, 2F);
+    assertEquals(1, listWithDupes.indexOf(1F));
+  }
+
+  public void testContains_nullElement() {
+    assertEquals(false, TERTIARY_LIST.contains(null));
+  }
+
+  public void testContains_incompatibleElementType() {
+    assertEquals(false, TERTIARY_LIST.contains(new Object()));
+  }
+
+  public void testContains_notInList() {
+    assertEquals(false, UNARY_LIST.contains(2F));
+  }
+
+  public void testContains_notInListWithDuplicates() {
+    FloatArrayList listWithDupes = newImmutableFloatArrayList(1F, 1F);
+    assertEquals(false, listWithDupes.contains(2F));
+  }
+
+  public void testContains_inList() {
+    assertEquals(true, TERTIARY_LIST.contains(2F));
+  }
+
+  public void testContains_inListWithDuplicates_matchAtHead() {
+    FloatArrayList listWithDupes = newImmutableFloatArrayList(1F, 1F, 2F);
+    assertEquals(true, listWithDupes.contains(1F));
+  }
+
+  public void testContains_inListWithDuplicates_matchMidList() {
+    FloatArrayList listWithDupes = newImmutableFloatArrayList(2F, 1F, 1F, 2F);
+    assertEquals(true, listWithDupes.contains(1F));
+  }
+
   public void testSize() {
     assertEquals(0, FloatArrayList.emptyList().size());
     assertEquals(1, UNARY_LIST.size());
@@ -225,9 +285,7 @@ public class FloatArrayListTest extends TestCase {
     for (int i = 0; i < 6; i++) {
       list.add(Float.valueOf(5 + i));
     }
-    assertEquals(
-        asList(0F, 1F, 4F, 2F, 3F, 5F, 6F, 7F, 8F, 9F, 10F),
-        list);
+    assertEquals(asList(0F, 1F, 4F, 2F, 3F, 5F, 6F, 7F, 8F, 9F, 10F), list);
 
     try {
       list.add(-1, 5F);
@@ -270,6 +328,15 @@ public class FloatArrayListTest extends TestCase {
     assertFalse(list.addAll(FloatArrayList.emptyList()));
   }
 
+  public void testEquals() {
+    FloatArrayList list1 = new FloatArrayList();
+    FloatArrayList list2 = new FloatArrayList();
+
+    list1.addFloat(Float.intBitsToFloat(0xff800001));
+    list2.addFloat(Float.intBitsToFloat(0xff800002));
+    assertEquals(list1, list2);
+  }
+
   public void testRemove() {
     list.addAll(TERTIARY_LIST);
     assertEquals(1F, (float) list.remove(0), 0.0f);
@@ -298,17 +365,24 @@ public class FloatArrayListTest extends TestCase {
     }
   }
 
-  public void testRemoveEndOfCapacity() {
-    FloatList toRemove =
-        FloatArrayList.emptyList().mutableCopyWithCapacity(1);
+  public void testRemoveEnd_listAtCapacity() {
+    FloatList toRemove = FloatArrayList.emptyList().mutableCopyWithCapacity(1);
     toRemove.addFloat(3);
     toRemove.remove(0);
     assertEquals(0, toRemove.size());
   }
 
+  public void testRemove_listAtCapacity() {
+    FloatList toRemove = FloatArrayList.emptyList().mutableCopyWithCapacity(2);
+    toRemove.addFloat(3);
+    toRemove.addFloat(4);
+    toRemove.remove(0);
+    assertEquals(1, toRemove.size());
+    assertEquals(4F, (float) toRemove.get(0));
+  }
+
   public void testSublistRemoveEndOfCapacity() {
-    FloatList toRemove =
-        FloatArrayList.emptyList().mutableCopyWithCapacity(1);
+    FloatList toRemove = FloatArrayList.emptyList().mutableCopyWithCapacity(1);
     toRemove.addFloat(3);
     toRemove.subList(0, 1).clear();
     assertEquals(0, toRemove.size());

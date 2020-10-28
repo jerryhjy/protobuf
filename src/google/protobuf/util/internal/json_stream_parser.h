@@ -35,12 +35,10 @@
 #include <string>
 
 #include <google/protobuf/stubs/common.h>
-#include <google/protobuf/stubs/stringpiece.h>
+#include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/stubs/status.h>
 
-namespace util {
-class Status;
-}  // namespace util
+#include <google/protobuf/port_def.inc>
 
 namespace google {
 namespace protobuf {
@@ -69,7 +67,7 @@ class ObjectWriter;
 //
 // This parser is thread-compatible as long as only one thread is calling a
 // Parse() method at a time.
-class LIBPROTOBUF_EXPORT JsonStreamParser {
+class PROTOBUF_EXPORT JsonStreamParser {
  public:
   // Creates a JsonStreamParser that will write to the given ObjectWriter.
   explicit JsonStreamParser(ObjectWriter* ow);
@@ -93,7 +91,7 @@ class LIBPROTOBUF_EXPORT JsonStreamParser {
  private:
   friend class JsonStreamParserTest;
   // Return the current recursion depth.
-  const int recursion_depth() { return recursion_depth_; }
+  int recursion_depth() { return recursion_depth_; }
 
   enum TokenType {
     BEGIN_STRING,     // " or '
@@ -132,7 +130,7 @@ class LIBPROTOBUF_EXPORT JsonStreamParser {
   };
 
   // Parses a single chunk of JSON, returning an error if the JSON was invalid.
-  util::Status ParseChunk(StringPiece json);
+  util::Status ParseChunk(StringPiece chunk);
 
   // Runs the parser based on stack_ and p_, until the stack is empty or p_ runs
   // out of data. If we unexpectedly run out of p_ we push the latest back onto
@@ -166,7 +164,8 @@ class LIBPROTOBUF_EXPORT JsonStreamParser {
   util::Status ParseNumberHelper(NumberResult* result);
 
   // Parse a number as double into a NumberResult.
-  util::Status ParseDoubleHelper(const string& number, NumberResult* result);
+  util::Status ParseDoubleHelper(const std::string& number,
+                                   NumberResult* result);
 
   // Handles a { during parsing of a value.
   util::Status HandleBeginObject();
@@ -232,7 +231,7 @@ class LIBPROTOBUF_EXPORT JsonStreamParser {
 
   // Contains any leftover text from a previous chunk that we weren't able to
   // fully parse, for example the start of a key or number.
-  string leftover_;
+  std::string leftover_;
 
   // The current chunk of JSON being parsed. Primarily used for providing
   // context during error reporting.
@@ -246,7 +245,7 @@ class LIBPROTOBUF_EXPORT JsonStreamParser {
 
   // Storage for key_ if we need to keep ownership, for example between chunks
   // or if the key was unescaped from a JSON string.
-  string key_storage_;
+  std::string key_storage_;
 
   // True during the FinishParse() call, so we know that any errors are fatal.
   // For example an unterminated string will normally result in cancelling and
@@ -258,21 +257,28 @@ class LIBPROTOBUF_EXPORT JsonStreamParser {
 
   // Storage for the string we parsed. This may be empty if the string was able
   // to be parsed directly from the input.
-  string parsed_storage_;
+  std::string parsed_storage_;
 
   // The character that opened the string, either ' or ".
   // A value of 0 indicates that string parsing is not in process.
   char string_open_;
 
   // Storage for the chunk that are being parsed in ParseChunk().
-  string chunk_storage_;
+  std::string chunk_storage_;
 
   // Whether to allow non UTF-8 encoded input and replace invalid code points.
   bool coerce_to_utf8_;
 
+  // Replacement character for invalid UTF-8 code points.
+  std::string utf8_replacement_character_;
+
   // Whether allows empty string represented null array value or object entry
   // value.
   bool allow_empty_null_;
+
+  // Whether unquoted object keys can contain embedded non-alphanumeric
+  // characters when this is unambiguous for parsing.
+  bool allow_permissive_key_naming_;
 
   // Whether allows out-of-range floating point numbers or reject them.
   bool loose_float_number_conversion_;
@@ -290,5 +296,7 @@ class LIBPROTOBUF_EXPORT JsonStreamParser {
 }  // namespace util
 }  // namespace protobuf
 }  // namespace google
+
+#include <google/protobuf/port_undef.inc>
 
 #endif  // GOOGLE_PROTOBUF_UTIL_CONVERTER_JSON_STREAM_PARSER_H__

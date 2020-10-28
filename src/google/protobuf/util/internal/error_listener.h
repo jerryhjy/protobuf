@@ -40,7 +40,10 @@
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/logging.h>
 #include <google/protobuf/util/internal/location_tracker.h>
-#include <google/protobuf/stubs/stringpiece.h>
+#include <google/protobuf/stubs/strutil.h>
+
+// Must be included last.
+#include <google/protobuf/port_def.inc>
 
 namespace google {
 namespace protobuf {
@@ -48,7 +51,7 @@ namespace util {
 namespace converter {
 
 // Interface for error listener.
-class LIBPROTOBUF_EXPORT ErrorListener {
+class PROTOBUF_EXPORT ErrorListener {
  public:
   virtual ~ErrorListener() {}
 
@@ -75,7 +78,7 @@ class LIBPROTOBUF_EXPORT ErrorListener {
 };
 
 // An error listener that ignores all errors.
-class LIBPROTOBUF_EXPORT NoopErrorListener : public ErrorListener {
+class PROTOBUF_EXPORT NoopErrorListener : public ErrorListener {
  public:
   NoopErrorListener() {}
   ~NoopErrorListener() override {}
@@ -100,5 +103,7 @@ class LIBPROTOBUF_EXPORT NoopErrorListener : public ErrorListener {
 }  // namespace util
 }  // namespace protobuf
 }  // namespace google
+
+#include <google/protobuf/port_undef.inc>
 
 #endif  // GOOGLE_PROTOBUF_UTIL_CONVERTER_ERROR_LISTENER_H__

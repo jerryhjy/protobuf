@@ -89,6 +89,8 @@
 
 #include <google/protobuf/stubs/status.h>
 
+#include <google/protobuf/port_def.inc>
+
 namespace google {
 namespace protobuf {
 namespace util {
@@ -151,6 +153,7 @@ class StatusOr {
   // If you need to initialize a T object from the stored value,
   // ConsumeValueOrDie() may be more efficient.
   const T& ValueOrDie() const;
+  const T& value () const;
 
  private:
   Status status_;
@@ -162,7 +165,7 @@ class StatusOr {
 
 namespace internal {
 
-class LIBPROTOBUF_EXPORT StatusOrHelper {
+class PROTOBUF_EXPORT StatusOrHelper {
  public:
   // Move type-agnostic error handling to the .cc.
   static void Crash(const util::Status& status);
@@ -202,7 +205,7 @@ inline StatusOr<T>::StatusOr(const Status& status) {
 template<typename T>
 inline StatusOr<T>::StatusOr(const T& value) {
   if (internal::StatusOrHelper::Specialize<T>::IsValueNull(value)) {
-    status_ = Status(error::INTERNAL, "nullptr is not a vaild argument.");
+    status_ = Status(error::INTERNAL, "nullptr is not a valid argument.");
   } else {
     status_ = Status::OK;
     value_ = value;
@@ -252,8 +255,18 @@ inline const T& StatusOr<T>::ValueOrDie() const {
   }
   return value_;
 }
+
+template<typename T>
+inline const T& StatusOr<T>::value() const {
+  if (!status_.ok()) {
+    internal::StatusOrHelper::Crash(status_);
+  }
+  return value_;
+}
 }  // namespace util
 }  // namespace protobuf
 }  // namespace google
+
+#include <google/protobuf/port_undef.inc>
 
 #endif  // GOOGLE_PROTOBUF_STUBS_STATUSOR_H_

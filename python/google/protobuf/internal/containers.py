@@ -33,20 +33,25 @@
 This file defines container classes which represent categories of protocol
 buffer field types which need extra maintenance. Currently these categories
 are:
-  - Repeated scalar fields - These are all repeated fields which aren't
+
+-   Repeated scalar fields - These are all repeated fields which aren't
     composite (e.g. they are of simple types like int32, string, etc).
-  - Repeated composite fields - Repeated fields which are composite. This
+-   Repeated composite fields - Repeated fields which are composite. This
     includes groups and nested messages.
 """
 
 __author__ = 'petar@google.com (Petar Petrov)'
 
-import collections
 import sys
+try:
+  # This fallback applies for all versions of Python before 3.3
+  import collections.abc as collections_abc
+except ImportError:
+  import collections as collections_abc
 
 if sys.version_info[0] < 3:
-  # We would use collections.MutableMapping all the time, but in Python 2 it
-  # doesn't define __slots__.  This causes two significant problems:
+  # We would use collections_abc.MutableMapping all the time, but in Python 2
+  # it doesn't define __slots__.  This causes two significant problems:
   #
   # 1. we can't disallow arbitrary attribute assignment, even if our derived
   #    classes *do* define __slots__.
@@ -59,7 +64,7 @@ if sys.version_info[0] < 3:
   # verbatim, except that:
   # 1. We declare __slots__.
   # 2. We don't declare this as a virtual base class.  The classes defined
-  #    in collections are the interesting base classes, not us.
+  #    in collections_abc are the interesting base classes, not us.
   #
   # Note: deriving from object is critical.  It is the only thing that makes
   # this a true type, allowing us to derive from it in C++ cleanly and making
@@ -106,7 +111,7 @@ if sys.version_info[0] < 3:
     __hash__ = None
 
     def __eq__(self, other):
-      if not isinstance(other, collections.Mapping):
+      if not isinstance(other, collections_abc.Mapping):
         return NotImplemented
       return dict(self.items()) == dict(other.items())
 
@@ -173,13 +178,13 @@ if sys.version_info[0] < 3:
         self[key] = default
       return default
 
-  collections.Mapping.register(Mapping)
-  collections.MutableMapping.register(MutableMapping)
+  collections_abc.Mapping.register(Mapping)
+  collections_abc.MutableMapping.register(MutableMapping)
 
 else:
   # In Python 3 we can just use MutableMapping directly, because it defines
   # __slots__.
-  MutableMapping = collections.MutableMapping
+  MutableMapping = collections_abc.MutableMapping
 
 
 class BaseContainer(object):
@@ -227,21 +232,23 @@ class BaseContainer(object):
     self._values.sort(*args, **kwargs)
 
 
-class RepeatedScalarFieldContainer(BaseContainer):
+collections_abc.MutableSequence.register(BaseContainer)
 
+
+class RepeatedScalarFieldContainer(BaseContainer):
   """Simple, type-checked, list-like container for holding repeated scalars."""
 
   # Disallows assignment to other attributes.
   __slots__ = ['_type_checker']
 
   def __init__(self, message_listener, type_checker):
-    """
-    Args:
-      message_listener: A MessageListener implementation.
-        The RepeatedScalarFieldContainer will call this object's
-        Modified() method when it is modified.
+    """Args:
+
+      message_listener: A MessageListener implementation. The
+      RepeatedScalarFieldContainer will call this object's Modified() method
+      when it is modified.
       type_checker: A type_checkers.ValueChecker instance to run on elements
-        inserted into this container.
+      inserted into this container.
     """
     super(RepeatedScalarFieldContainer, self).__init__(message_listener)
     self._type_checker = type_checker
@@ -337,8 +344,6 @@ class RepeatedScalarFieldContainer(BaseContainer):
     # We are presumably comparing against some other sequence type.
     return other == self._values
 
-collections.MutableSequence.register(BaseContainer)
-
 
 class RepeatedCompositeFieldContainer(BaseContainer):
 
@@ -376,8 +381,27 @@ class RepeatedCompositeFieldContainer(BaseContainer):
       self._message_listener.Modified()
     return new_element
 
+  def append(self, value):
+    """Appends one element by copying the message."""
+    new_element = self._message_descriptor._concrete_class()
+    new_element._SetListener(self._message_listener)
+    new_element.CopyFrom(value)
+    self._values.append(new_element)
+    if not self._message_listener.dirty:
+      self._message_listener.Modified()
+
+  def insert(self, key, value):
+    """Inserts the item at the specified position by copying."""
+    new_element = self._message_descriptor._concrete_class()
+    new_element._SetListener(self._message_listener)
+    new_element.CopyFrom(value)
+    self._values.insert(key, new_element)
+    if not self._message_listener.dirty:
+      self._message_listener.Modified()
+
   def extend(self, elem_seq):
     """Extends by appending the given sequence of elements of the same type
+
     as this one, copying each individual message.
     """
     message_class = self._message_descriptor._concrete_class

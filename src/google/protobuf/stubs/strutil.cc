@@ -40,6 +40,7 @@
 #include <iterator>
 #include <limits>
 
+#include <google/protobuf/stubs/logging.h>
 #include <google/protobuf/stubs/stl_util.h>
 
 #ifdef _WIN32
@@ -76,21 +77,6 @@ inline bool isxdigit(char c) {
 
 inline bool isprint(char c) {
   return c >= 0x20 && c <= 0x7E;
-}
-
-// ----------------------------------------------------------------------
-// StripString
-//    Replaces any occurrence of the character 'remove' (or the characters
-//    in 'remove') with the character 'replacewith'.
-// ----------------------------------------------------------------------
-void StripString(string* s, const char* remove, char replacewith) {
-  const char * str_start = s->c_str();
-  const char * str = str_start;
-  for (str = strpbrk(str, remove);
-       str != nullptr;
-       str = strpbrk(str + 1, remove)) {
-    (*s)[str - str_start] = replacewith;
-  }
 }
 
 // ----------------------------------------------------------------------
@@ -190,10 +176,8 @@ string StringReplace(const string& s, const string& oldsub,
 // the characters in the string, not the entire string as a single delimiter.
 // ----------------------------------------------------------------------
 template <typename ITR>
-static inline
-void SplitStringToIteratorUsing(const string& full,
-                                const char* delim,
-                                ITR& result) {
+static inline void SplitStringToIteratorUsing(StringPiece full,
+                                              const char *delim, ITR &result) {
   // Optimize the common case where delim is a single character.
   if (delim[0] != '\0' && delim[1] == '\0') {
     char c = delim[0];
@@ -205,7 +189,7 @@ void SplitStringToIteratorUsing(const string& full,
       } else {
         const char* start = p;
         while (++p != end && *p != c);
-        *result++ = string(start, p - start);
+        *result++ = std::string(start, p - start);
       }
     }
     return;
@@ -216,17 +200,17 @@ void SplitStringToIteratorUsing(const string& full,
   while (begin_index != string::npos) {
     end_index = full.find_first_of(delim, begin_index);
     if (end_index == string::npos) {
-      *result++ = full.substr(begin_index);
+      *result++ = std::string(full.substr(begin_index));
       return;
     }
-    *result++ = full.substr(begin_index, (end_index - begin_index));
+    *result++ =
+        std::string(full.substr(begin_index, (end_index - begin_index)));
     begin_index = full.find_first_not_of(delim, end_index);
   }
 }
 
-void SplitStringUsing(const string& full,
-                      const char* delim,
-                      std::vector<string>* result) {
+void SplitStringUsing(StringPiece full, const char *delim,
+                      std::vector<string> *result) {
   std::back_insert_iterator< std::vector<string> > it(*result);
   SplitStringToIteratorUsing(full, delim, it);
 }
@@ -242,29 +226,28 @@ void SplitStringUsing(const string& full,
 //
 // If "pieces" is negative for some reason, it returns the whole string
 // ----------------------------------------------------------------------
-template <typename StringType, typename ITR>
-static inline
-void SplitStringToIteratorAllowEmpty(const StringType& full,
-                                     const char* delim,
-                                     int pieces,
-                                     ITR& result) {
+template <typename ITR>
+static inline void SplitStringToIteratorAllowEmpty(StringPiece full,
+                                                   const char *delim,
+                                                   int pieces, ITR &result) {
   string::size_type begin_index, end_index;
   begin_index = 0;
 
   for (int i = 0; (i < pieces-1) || (pieces == 0); i++) {
     end_index = full.find_first_of(delim, begin_index);
     if (end_index == string::npos) {
-      *result++ = full.substr(begin_index);
+      *result++ = std::string(full.substr(begin_index));
       return;
     }
-    *result++ = full.substr(begin_index, (end_index - begin_index));
+    *result++ =
+        std::string(full.substr(begin_index, (end_index - begin_index)));
     begin_index = end_index + 1;
   }
-  *result++ = full.substr(begin_index);
+  *result++ = std::string(full.substr(begin_index));
 }
 
-void SplitStringAllowEmpty(const string& full, const char* delim,
-                           std::vector<string>* result) {
+void SplitStringAllowEmpty(StringPiece full, const char *delim,
+                           std::vector<string> *result) {
   std::back_insert_iterator<std::vector<string> > it(*result);
   SplitStringToIteratorAllowEmpty(full, delim, 0, it);
 }
@@ -1063,10 +1046,12 @@ done:
 }
 
 char* FastInt32ToBufferLeft(int32 i, char* buffer) {
-  uint32 u = i;
+  uint32 u = 0;
   if (i < 0) {
     *buffer++ = '-';
-    u = -i;
+    u -= i;
+  } else {
+    u = i;
   }
   return FastUInt32ToBufferLeft(u, buffer);
 }
@@ -1114,10 +1099,12 @@ char* FastUInt64ToBufferLeft(uint64 u64, char* buffer) {
 }
 
 char* FastInt64ToBufferLeft(int64 i, char* buffer) {
-  uint64 u = i;
+  uint64 u = 0;
   if (i < 0) {
     *buffer++ = '-';
-    u = -i;
+    u -= i;
+  } else {
+    u = i;
   }
   return FastUInt64ToBufferLeft(u, buffer);
 }
@@ -1286,7 +1273,7 @@ char* DoubleToBuffer(double value, char* buffer) {
   // of a double.  This long double may have extra bits that make it compare
   // unequal to "value" even though it would be exactly equal if it were
   // truncated to a double.
-  volatile double parsed_value = strtod(buffer, nullptr);
+  volatile double parsed_value = internal::NoLocaleStrtod(buffer, nullptr);
   if (parsed_value != value) {
     int snprintf_result =
       snprintf(buffer, kDoubleToBufferSize, "%.*g", DBL_DIG+2, value);
@@ -1338,7 +1325,7 @@ bool safe_strtof(const char* str, float* value) {
   char* endptr;
   errno = 0;  // errno only gets set on errors
 #if defined(_WIN32) || defined (__hpux)  // has no strtof()
-  *value = strtod(str, &endptr);
+  *value = internal::NoLocaleStrtod(str, &endptr);
 #else
   *value = strtof(str, &endptr);
 #endif
@@ -1347,7 +1334,7 @@ bool safe_strtof(const char* str, float* value) {
 
 bool safe_strtod(const char* str, double* value) {
   char* endptr;
-  *value = strtod(str, &endptr);
+  *value = internal::NoLocaleStrtod(str, &endptr);
   if (endptr != str) {
     while (ascii_isspace(*endptr)) ++endptr;
   }
@@ -1445,32 +1432,44 @@ AlphaNum::AlphaNum(strings::Hex hex) {
 // after the area just overwritten.  It comes in multiple flavors to minimize
 // call overhead.
 static char *Append1(char *out, const AlphaNum &x) {
-  memcpy(out, x.data(), x.size());
-  return out + x.size();
+  if (x.size() > 0) {
+    memcpy(out, x.data(), x.size());
+    out += x.size();
+  }
+  return out;
 }
 
 static char *Append2(char *out, const AlphaNum &x1, const AlphaNum &x2) {
-  memcpy(out, x1.data(), x1.size());
-  out += x1.size();
-
-  memcpy(out, x2.data(), x2.size());
-  return out + x2.size();
+  if (x1.size() > 0) {
+    memcpy(out, x1.data(), x1.size());
+    out += x1.size();
+  }
+  if (x2.size() > 0) {
+    memcpy(out, x2.data(), x2.size());
+    out += x2.size();
+  }
+  return out;
 }
 
-static char *Append4(char *out,
-                     const AlphaNum &x1, const AlphaNum &x2,
+static char *Append4(char *out, const AlphaNum &x1, const AlphaNum &x2,
                      const AlphaNum &x3, const AlphaNum &x4) {
-  memcpy(out, x1.data(), x1.size());
-  out += x1.size();
-
-  memcpy(out, x2.data(), x2.size());
-  out += x2.size();
-
-  memcpy(out, x3.data(), x3.size());
-  out += x3.size();
-
-  memcpy(out, x4.data(), x4.size());
-  return out + x4.size();
+  if (x1.size() > 0) {
+    memcpy(out, x1.data(), x1.size());
+    out += x1.size();
+  }
+  if (x2.size() > 0) {
+    memcpy(out, x2.data(), x2.size());
+    out += x2.size();
+  }
+  if (x3.size() > 0) {
+    memcpy(out, x3.data(), x3.size());
+    out += x3.size();
+  }
+  if (x4.size() > 0) {
+    memcpy(out, x4.data(), x4.size());
+    out += x4.size();
+  }
+  return out;
 }
 
 string StrCat(const AlphaNum &a, const AlphaNum &b) {
@@ -1959,11 +1958,12 @@ int Base64UnescapeInternal(const char *src_param, int szsrc,
 // #include <sys/time.h>
 // #include <stdlib.h>
 // #include <string.h>
+// #include <stdio.h>
 // main()
 // {
 //   static const char Base64[] =
 //     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-//   char *pos;
+//   const char *pos;
 //   int idx, i, j;
 //   printf("    ");
 //   for (i = 0; i < 255; i += 8) {
@@ -1976,7 +1976,7 @@ int Base64UnescapeInternal(const char *src_param, int szsrc,
 //       if (idx == -1)
 //         printf(" %2d,     ", idx);
 //       else
-//         printf(" %2d/*%c*/,", idx, j);
+//         printf(" %2d/""*%c*""/,", idx, j);
 //     }
 //     printf("\n    ");
 //   }
@@ -1994,7 +1994,7 @@ static const signed char kUnBase64[] = {
   52/*0*/, 53/*1*/, 54/*2*/, 55/*3*/, 56/*4*/, 57/*5*/, 58/*6*/, 59/*7*/,
   60/*8*/, 61/*9*/, -1,      -1,      -1,      -1,      -1,      -1,
   -1,       0/*A*/,  1/*B*/,  2/*C*/,  3/*D*/,  4/*E*/,  5/*F*/,  6/*G*/,
-  07/*H*/,  8/*I*/,  9/*J*/, 10/*K*/, 11/*L*/, 12/*M*/, 13/*N*/, 14/*O*/,
+   7/*H*/,  8/*I*/,  9/*J*/, 10/*K*/, 11/*L*/, 12/*M*/, 13/*N*/, 14/*O*/,
   15/*P*/, 16/*Q*/, 17/*R*/, 18/*S*/, 19/*T*/, 20/*U*/, 21/*V*/, 22/*W*/,
   23/*X*/, 24/*Y*/, 25/*Z*/, -1,      -1,      -1,      -1,      -1,
   -1,      26/*a*/, 27/*b*/, 28/*c*/, 29/*d*/, 30/*e*/, 31/*f*/, 32/*g*/,
@@ -2028,7 +2028,7 @@ static const signed char kUnWebSafeBase64[] = {
   52/*0*/, 53/*1*/, 54/*2*/, 55/*3*/, 56/*4*/, 57/*5*/, 58/*6*/, 59/*7*/,
   60/*8*/, 61/*9*/, -1,      -1,      -1,      -1,      -1,      -1,
   -1,       0/*A*/,  1/*B*/,  2/*C*/,  3/*D*/,  4/*E*/,  5/*F*/,  6/*G*/,
-  07/*H*/,  8/*I*/,  9/*J*/, 10/*K*/, 11/*L*/, 12/*M*/, 13/*N*/, 14/*O*/,
+   7/*H*/,  8/*I*/,  9/*J*/, 10/*K*/, 11/*L*/, 12/*M*/, 13/*N*/, 14/*O*/,
   15/*P*/, 16/*Q*/, 17/*R*/, 18/*S*/, 19/*T*/, 20/*U*/, 21/*V*/, 22/*W*/,
   23/*X*/, 24/*Y*/, 25/*Z*/, -1,      -1,      -1,      -1,      63/*_*/,
   -1,      26/*a*/, 27/*b*/, 28/*c*/, 29/*d*/, 30/*e*/, 31/*f*/, 32/*g*/,
@@ -2281,16 +2281,19 @@ int EncodeAsUTF8Char(uint32 code_point, char* output) {
 
 // Table of UTF-8 character lengths, based on first byte
 static const unsigned char kUTF8LenTbl[256] = {
-  1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,
-  1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,
-  1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,
-  1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 
-  1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,
-  1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,
-  2,2,2,2,2,2,2,2, 2,2,2,2,2,2,2,2, 2,2,2,2,2,2,2,2, 2,2,2,2,2,2,2,2,
-  3,3,3,3,3,3,3,3, 3,3,3,3,3,3,3,3, 4,4,4,4,4,4,4,4, 4,4,4,4,4,4,4,4
-};
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+    3, 3, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
 // Return length of a single UTF-8 source character
 int UTF8FirstLetterNumBytes(const char* src, int len) {
@@ -2404,6 +2407,77 @@ void CleanStringLineEndings(string *str, bool auto_end_last_line) {
     str->resize(output_pos);
   }
 }
+
+namespace internal {
+
+// ----------------------------------------------------------------------
+// NoLocaleStrtod()
+//   This code will make you cry.
+// ----------------------------------------------------------------------
+
+namespace {
+
+// Returns a string identical to *input except that the character pointed to
+// by radix_pos (which should be '.') is replaced with the locale-specific
+// radix character.
+std::string LocalizeRadix(const char *input, const char *radix_pos) {
+  // Determine the locale-specific radix character by calling sprintf() to
+  // print the number 1.5, then stripping off the digits.  As far as I can
+  // tell, this is the only portable, thread-safe way to get the C library
+  // to divuldge the locale's radix character.  No, localeconv() is NOT
+  // thread-safe.
+  char temp[16];
+  int size = snprintf(temp, sizeof(temp), "%.1f", 1.5);
+  GOOGLE_CHECK_EQ(temp[0], '1');
+  GOOGLE_CHECK_EQ(temp[size - 1], '5');
+  GOOGLE_CHECK_LE(size, 6);
+
+  // Now replace the '.' in the input with it.
+  std::string result;
+  result.reserve(strlen(input) + size - 3);
+  result.append(input, radix_pos);
+  result.append(temp + 1, size - 2);
+  result.append(radix_pos + 1);
+  return result;
+}
+
+}  // namespace
+
+double NoLocaleStrtod(const char *str, char **endptr) {
+  // We cannot simply set the locale to "C" temporarily with setlocale()
+  // as this is not thread-safe.  Instead, we try to parse in the current
+  // locale first.  If parsing stops at a '.' character, then this is a
+  // pretty good hint that we're actually in some other locale in which
+  // '.' is not the radix character.
+
+  char *temp_endptr;
+  double result = strtod(str, &temp_endptr);
+  if (endptr != NULL) *endptr = temp_endptr;
+  if (*temp_endptr != '.') return result;
+
+  // Parsing halted on a '.'.  Perhaps we're in a different locale?  Let's
+  // try to replace the '.' with a locale-specific radix character and
+  // try again.
+  std::string localized = LocalizeRadix(str, temp_endptr);
+  const char *localized_cstr = localized.c_str();
+  char *localized_endptr;
+  result = strtod(localized_cstr, &localized_endptr);
+  if ((localized_endptr - localized_cstr) > (temp_endptr - str)) {
+    // This attempt got further, so replacing the decimal must have helped.
+    // Update endptr to point at the right location.
+    if (endptr != NULL) {
+      // size_diff is non-zero if the localized radix has multiple bytes.
+      int size_diff = localized.size() - strlen(str);
+      // const_cast is necessary to match the strtod() interface.
+      *endptr = const_cast<char *>(
+          str + (localized_endptr - localized_cstr - size_diff));
+    }
+  }
+
+  return result;
+}
+
+}  // namespace internal
 
 }  // namespace protobuf
 }  // namespace google
